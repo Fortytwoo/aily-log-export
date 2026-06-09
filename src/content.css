@@ -1,0 +1,30 @@
+.aily-log-export-checkbox {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin: 0 6px 0 0;
+  border: 1px solid #8f959e;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.aily-log-export-checkbox:checked {
+  border-color: #0f766e;
+  background:
+    linear-gradient(135deg, transparent 0 42%, #fff 42% 58%, transparent 58%),
+    linear-gradient(45deg, transparent 0 45%, #fff 45% 60%, transparent 60%),
+    #0f766e;
+}
+
+.aily-log-export-checkbox:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.35);
+  outline-offset: 2px;
+}
+
+.aily-log-export-row-mark {
+  box-shadow: inset 2px 0 0 #0f766e;
+}
+
