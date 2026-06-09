@@ -46,7 +46,7 @@ This extension is intended for Feishu Aily administrators, builders, and interna
 
 **Official website / support URL:** https://github.com/Fortytwoo/aily-log-export
 
-**Privacy policy URL:** Use the published URL for `docs/privacy-policy.md`, for example the GitHub file URL after release.
+**Privacy policy URL:** https://fortytwoo.github.io/aily-log-export/privacy-policy.html
 
 ## Privacy Tab
 
