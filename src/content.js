@@ -415,7 +415,7 @@
         :host {
           all: initial;
           position: fixed;
-          top: 72px;
+          bottom: 88px;
           right: 24px;
           z-index: 2147483647;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -429,6 +429,12 @@
           color: #1f2329;
           overflow: hidden;
         }
+        .panel.collapsed {
+          width: 48px;
+          height: 48px;
+          border-radius: 999px;
+          border-color: rgba(15, 118, 110, 0.42);
+        }
         .header {
           display: flex;
           align-items: center;
@@ -438,6 +444,20 @@
           border-bottom: 1px solid #eef0f3;
           font-size: 13px;
           font-weight: 600;
+          cursor: move;
+          user-select: none;
+        }
+        .panel.collapsed .header {
+          width: 48px;
+          height: 48px;
+          padding: 0;
+          border-bottom: 0;
+          justify-content: center;
+          cursor: pointer;
+        }
+        .panel.collapsed [data-role="title"],
+        .panel.collapsed .body {
+          display: none;
         }
         .body {
           display: grid;
@@ -482,6 +502,16 @@
           padding: 0;
           border: 0;
           color: #646a73;
+          cursor: pointer;
+        }
+        .panel.collapsed button.icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 999px;
+          background: #0f766e;
+          color: #fff;
+          font-size: 15px;
+          font-weight: 700;
         }
         button:disabled {
           cursor: not-allowed;
@@ -494,10 +524,10 @@
           color: #646a73;
         }
       </style>
-      <section class="panel" aria-label="Aily runtime log exporter">
-        <div class="header">
+      <section class="panel collapsed" aria-label="Aily runtime log exporter">
+        <div class="header" data-role="drag-handle">
           <span data-role="title">Aily Trace ID 导出</span>
-          <button class="icon" type="button" data-action="collapse" title="收起">-</button>
+          <button class="icon" type="button" data-action="collapse" title="展开导出面板">导</button>
         </div>
         <div class="body">
           <div class="count" data-role="count">已选择 0 / 0</div>
@@ -526,6 +556,7 @@
         toggleToolbar(shadow);
       }
     });
+    installToolbarDrag(host, shadow);
 
     document.documentElement.appendChild(host);
     state.toolbarHost = host;
@@ -541,12 +572,63 @@
   }
 
   function toggleToolbar(shadow) {
-    const body = shadow.querySelector(".body");
+    const panel = shadow.querySelector(".panel");
     const button = shadow.querySelector("[data-action='collapse']");
-    const hidden = body.style.display === "none";
-    body.style.display = hidden ? "grid" : "none";
-    button.textContent = hidden ? "-" : "+";
-    button.title = hidden ? "收起" : "展开";
+    const collapsed = panel.classList.toggle("collapsed");
+    button.textContent = collapsed ? "导" : "-";
+    button.title = collapsed ? "展开导出面板" : "收起为浮动按钮";
+  }
+
+  function installToolbarDrag(host, shadow) {
+    const handle = shadow.querySelector("[data-role='drag-handle']");
+    if (!handle) {
+      return;
+    }
+
+    let drag = null;
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.target && event.target.dataset && event.target.dataset.action) {
+        return;
+      }
+      const rect = host.getBoundingClientRect();
+      drag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height
+      };
+      handle.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+
+    handle.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return;
+      }
+      const nextLeft = clamp(drag.left + event.clientX - drag.startX, 8, window.innerWidth - drag.width - 8);
+      const nextTop = clamp(drag.top + event.clientY - drag.startY, 8, window.innerHeight - drag.height - 8);
+      host.style.left = `${nextLeft}px`;
+      host.style.top = `${nextTop}px`;
+      host.style.right = "auto";
+      host.style.bottom = "auto";
+    });
+
+    handle.addEventListener("pointerup", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return;
+      }
+      drag = null;
+      try {
+        handle.releasePointerCapture(event.pointerId);
+      } catch (_) {
+        // Ignore if the browser already released capture.
+      }
+    });
   }
 
   function setStatus(message) {

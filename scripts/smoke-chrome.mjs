@@ -164,6 +164,7 @@ try {
   const result = await cdp.send("Runtime.evaluate", {
     expression: `(() => ({
       toolbar: Boolean(document.getElementById("aily-runtime-log-exporter")),
+      collapsed: document.getElementById("aily-runtime-log-exporter")?.shadowRoot?.querySelector(".panel")?.classList.contains("collapsed"),
       checkboxes: document.querySelectorAll(".aily-log-export-checkbox").length,
       state: window.__ailyRuntimeLogExporter.getState()
     }))()`,
@@ -171,7 +172,7 @@ try {
   });
 
   const value = result.result.value;
-  if (!value.toolbar || value.checkboxes < 3 || !value.state || value.state.mode !== "run-list" || value.state.traces < 3) {
+  if (!value.toolbar || !value.collapsed || value.checkboxes < 3 || !value.state || value.state.mode !== "run-list" || value.state.traces < 3) {
     throw new Error(`Unexpected smoke result: ${JSON.stringify(value)}`);
   }
 
