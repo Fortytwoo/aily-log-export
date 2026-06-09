@@ -20,17 +20,16 @@ const fixtureHtml = `<!doctype html>
   <body>
     <main>
       <h1>运行日志</h1>
-      <section>
-        <button aria-label="运行总览">运行总览</button><span>3.65 min</span>
-        <button aria-label="LLM 思考">LLM 思考</button><span>13.53 s</span>
-        <button aria-label="bash">bash</button><span>666 ms</span>
-      </section>
-      <section>
-        <h2>Input</h2>
-        <pre>{"message":"sample input"}</pre>
-        <h2>Output</h2>
-        <pre>{"message":"sample output"}</pre>
-      </section>
+      <table>
+        <thead>
+          <tr><th>状态</th><th>环境</th><th>用户</th><th>开始时间（UTC+8）</th><th>渠道</th><th>trace ID</th><th>会话 ID</th><th>额度</th><th>耗时</th><th>版本</th></tr>
+        </thead>
+        <tbody>
+          <tr><td></td><td>线上</td><td>李志坚</td><td>2026-06-09 14:26:59</td><td>飞书单聊</td><td>7649278193551805426</td><td>conversation_4k804jue3g7rm</td><td>0</td><td>38.64 s</td><td>1.0.11</td></tr>
+          <tr><td></td><td>线上</td><td>李志坚</td><td>2026-06-09 14:24:28</td><td>飞书单聊</td><td>7649277539026226137</td><td>conversation_4k804jue3g7rm</td><td>0</td><td>14.44 s</td><td>1.0.11</td></tr>
+          <tr><td></td><td>开发</td><td>李志坚</td><td>2026-06-09 14:13:05</td><td>开发后台</td><td>7649274606093110250</td><td>conversation_4kb2gmwq3knv3</td><td>5.08</td><td>11.10 s</td><td>debug</td></tr>
+        </tbody>
+      </table>
     </main>
   </body>
 </html>`;
@@ -152,8 +151,8 @@ try {
 
   const contentCode = await readFile(path.join(root, "src", "content.js"), "utf8");
   const patchedContentCode = contentCode.replace(
-    /return location\.hostname === "feishu\.feishu\.cn" && \/\\\/builder\\\/runtime-log\\\/\?\$\/\.test\(location\.pathname\);/,
-    "return true;"
+    /function isRuntimeLogPage\(\) \{[\s\S]*?\n  \}/,
+    "function isRuntimeLogPage() { return true; }"
   );
 
   await cdp.send("Runtime.evaluate", {
@@ -172,7 +171,7 @@ try {
   });
 
   const value = result.result.value;
-  if (!value.toolbar || value.checkboxes < 3 || !value.state || value.state.traces < 3) {
+  if (!value.toolbar || value.checkboxes < 3 || !value.state || value.state.mode !== "run-list" || value.state.traces < 3) {
     throw new Error(`Unexpected smoke result: ${JSON.stringify(value)}`);
   }
 

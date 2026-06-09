@@ -31,7 +31,9 @@
         return;
       }
       exportButton.disabled = result.selected === 0;
-      setStatus(`run_id: ${result.runId || "-"}，已选择 ${result.selected}/${result.traces}`);
+      const itemName = result.mode === "run-list" ? "trace ID" : "span";
+      const prefix = result.runId ? `run_id: ${result.runId}` : "运行日志列表";
+      setStatus(`${prefix}，已选择 ${result.selected}/${result.traces} 个 ${itemName}`);
     } catch (_) {
       exportButton.disabled = true;
       setStatus("页面未就绪，请刷新运行日志页");
@@ -62,4 +64,3 @@
 
   refreshStatus();
 })();
-

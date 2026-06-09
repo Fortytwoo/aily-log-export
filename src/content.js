@@ -3,27 +3,34 @@
 
   const APP_ID = "aily-runtime-log-exporter";
   const HOOK_SOURCE = "aily-runtime-log-exporter-hook";
-  const TRACE_NODE_ATTR = "data-aily-log-export-key";
   const CHECKBOX_CLASS = "aily-log-export-checkbox";
   const ROW_MARK_CLASS = "aily-log-export-row-mark";
+  const RUN_ATTR = "data-aily-log-export-run-id";
+  const SPAN_ATTR = "data-aily-log-export-span-key";
+  const JOB_KEY = "ailyRuntimeLogExportJobV2";
   const MAX_RAW_EVENTS = 120;
   const DETAIL_WAIT_MS = 1400;
+  const RUN_DETAIL_TIMEOUT_MS = 30000;
 
   const state = {
-    selectedKeys: new Set(),
-    traceNodes: new Map(),
+    selectedRunIds: new Set(),
+    selectedSpanKeys: new Set(),
+    runRows: new Map(),
+    spanNodes: new Map(),
     rawEvents: [],
     observer: null,
     toolbarHost: null,
     toolbar: null,
     scanTimer: null,
+    mode: "unknown",
     exporting: false,
+    resumingJob: false,
     booted: false
   };
 
-  const traceLabelPattern =
+  const spanLabelPattern =
     /^(运行总览|意图识别|主\s*Agent\s*循环|LLM\s*思考|工具调用|逻辑结束|get_skills|bash|tool|技能|deepseek[-_\w]*|.+Agent.*)$/i;
-  const traceTextPattern =
+  const spanTextPattern =
     /(运行总览|意图识别|主\s*Agent\s*循环|LLM\s*思考|工具调用|逻辑结束|get_skills|bash|deepseek|工具调用|\btool\b)/i;
   const durationPattern = /(\d+(?:\.\d+)?\s*(?:ms|s|min|秒|分钟))/i;
 
@@ -40,6 +47,14 @@
       runId: params.get("run_id") || "",
       spanId: params.get("span_id") || ""
     };
+  }
+
+  function isRuntimeLogListPage() {
+    return isRuntimeLogPage() && !getRuntimeParams().runId;
+  }
+
+  function isRuntimeLogDetailPage() {
+    return isRuntimeLogPage() && Boolean(getRuntimeParams().runId);
   }
 
   function cleanText(text) {
@@ -74,23 +89,156 @@
     return cleanText(label).split("\n")[0].slice(0, 80);
   }
 
-  function getRowText(element) {
-    const row = getTraceRow(element);
-    return cleanText((row && row.innerText) || element.innerText || element.textContent || "");
+  function getRowText(row) {
+    return cleanText((row && row.innerText) || (row && row.textContent) || "");
   }
 
-  function getDurationText(element) {
-    const rowText = getRowText(element);
-    const match = rowText.match(durationPattern);
-    return match ? match[1] : "";
+  function getRuntimeBaseUrl() {
+    const url = new URL(location.href);
+    url.search = "";
+    url.hash = "";
+    return url;
   }
 
-  function getTraceRow(element) {
+  function buildRunDetailUrl(runId) {
+    const url = getRuntimeBaseUrl();
+    url.searchParams.set("run_id", runId);
+    return url.href;
+  }
+
+  function getCellTexts(row) {
+    return Array.from(row.children || []).map((cell) => cleanText(cell.innerText || cell.textContent || ""));
+  }
+
+  function parseRunRow(row) {
+    if (!row || row.tagName !== "TR" || !isElementVisible(row)) {
+      return null;
+    }
+
+    const rowText = getRowText(row);
+    if (!rowText || /trace ID\s+会话 ID|状态\s+环境\s+用户/.test(rowText)) {
+      return null;
+    }
+
+    const traceMatch = rowText.match(/\b\d{16,}\b/);
+    if (!traceMatch) {
+      return null;
+    }
+
+    const cells = getCellTexts(row);
+    const traceId = cells.find((cell) => /^\d{16,}$/.test(cell)) || traceMatch[0];
+    const conversationId =
+      cells.find((cell) => /^conversation_/.test(cell)) ||
+      (rowText.match(/\bconversation_[\w-]+\b/) || [""])[0];
+    const startTime =
+      cells.find((cell) => /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(cell)) || "";
+    const offset = /^(线上|开发|测试|灰度|预发)$/.test(cells[0] || "") ? 0 : 1;
+
+    return {
+      key: traceId,
+      runId: traceId,
+      traceId,
+      detailUrl: buildRunDetailUrl(traceId),
+      row,
+      rowText,
+      cells,
+      statusText: offset === 0 ? "" : cells[0] || "",
+      environment: cells[offset] || "",
+      user: cells[offset + 1] || "",
+      startTime,
+      channel: cells[offset + 3] || "",
+      conversationId,
+      quota: cells[offset + 6] || "",
+      durationText: cells[offset + 7] || "",
+      version: cells[offset + 8] || ""
+    };
+  }
+
+  function collectRunRows() {
+    const rows = Array.from(document.querySelectorAll("tr"));
+    const result = [];
+    const seen = new Set();
+
+    for (const row of rows) {
+      const parsed = parseRunRow(row);
+      if (!parsed || seen.has(parsed.runId)) {
+        continue;
+      }
+      seen.add(parsed.runId);
+      row.setAttribute(RUN_ATTR, parsed.runId);
+      result.push(parsed);
+    }
+
+    return result;
+  }
+
+  function createRunCheckbox(item) {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = CHECKBOX_CLASS;
+    checkbox.title = "选择此 trace ID 用于 JSON 导出";
+    checkbox.setAttribute("aria-label", `选择 trace ID ${item.traceId}`);
+    checkbox.dataset.ailyFor = item.key;
+    checkbox.checked = state.selectedRunIds.has(item.key);
+
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    checkbox.addEventListener("change", (event) => {
+      event.stopPropagation();
+      if (checkbox.checked) {
+        state.selectedRunIds.add(item.key);
+        item.row.classList.add(ROW_MARK_CLASS);
+      } else {
+        state.selectedRunIds.delete(item.key);
+        item.row.classList.remove(ROW_MARK_CLASS);
+      }
+      updateToolbar();
+    });
+
+    return checkbox;
+  }
+
+  function scanRunRows() {
+    ensureToolbar();
+    state.mode = "run-list";
+    state.spanNodes.clear();
+
+    const rows = collectRunRows();
+    const liveKeys = new Set(rows.map((item) => item.key));
+    state.runRows = new Map(rows.map((item) => [item.key, item]));
+
+    for (const key of Array.from(state.selectedRunIds)) {
+      if (!liveKeys.has(key)) {
+        state.selectedRunIds.delete(key);
+      }
+    }
+
+    for (const item of rows) {
+      const firstCell = item.row.firstElementChild;
+      if (!firstCell) {
+        continue;
+      }
+      const selector = `.${CHECKBOX_CLASS}[data-aily-for="${CSS.escape(item.key)}"]`;
+      const existing = firstCell.querySelector(selector);
+      if (!existing) {
+        firstCell.insertBefore(createRunCheckbox(item), firstCell.firstChild);
+      } else {
+        existing.checked = state.selectedRunIds.has(item.key);
+      }
+      item.row.classList.toggle(ROW_MARK_CLASS, state.selectedRunIds.has(item.key));
+    }
+
+    updateToolbar();
+  }
+
+  function getSpanRow(element) {
     let current = element;
     for (let depth = 0; current && depth < 4; depth += 1) {
-      const text = cleanText(current.innerText || current.textContent || "");
+      const text = getRowText(current);
       const rect = current.getBoundingClientRect();
-      if (text && rect.width > 60 && rect.height <= 72 && traceTextPattern.test(text)) {
+      if (text && rect.width > 60 && rect.height <= 72 && spanTextPattern.test(text)) {
         return current;
       }
       current = current.parentElement;
@@ -98,7 +246,16 @@
     return element;
   }
 
-  function isExcludedCandidate(element) {
+  function getSpanRowText(element) {
+    return getRowText(getSpanRow(element));
+  }
+
+  function getSpanDurationText(element) {
+    const match = getSpanRowText(element).match(durationPattern);
+    return match ? match[1] : "";
+  }
+
+  function isExcludedSpanCandidate(element) {
     if (element.closest(`#${APP_ID}`)) {
       return true;
     }
@@ -120,8 +277,8 @@
     return /^(发布|复制|日志|运行日志|点赞|点踩|折叠|使用渠道)$/.test(label);
   }
 
-  function isTraceCandidate(element) {
-    if (!isRuntimeLogPage() || !isElementVisible(element) || isExcludedCandidate(element)) {
+  function isSpanCandidate(element) {
+    if (!isRuntimeLogDetailPage() || !isElementVisible(element) || isExcludedSpanCandidate(element)) {
       return false;
     }
 
@@ -130,17 +287,16 @@
       return false;
     }
 
-    if (traceLabelPattern.test(label)) {
+    if (spanLabelPattern.test(label)) {
       return true;
     }
 
-    const rowText = getRowText(element);
-    return rowText.length <= 160 && traceTextPattern.test(rowText) && durationPattern.test(rowText);
+    const rowText = getSpanRowText(element);
+    return rowText.length <= 160 && spanTextPattern.test(rowText) && durationPattern.test(rowText);
   }
 
-  function collectTraceCandidates() {
-    const elements = Array.from(document.querySelectorAll("button,[role='button']"))
-      .filter(isTraceCandidate);
+  function collectSpanCandidates() {
+    const elements = Array.from(document.querySelectorAll("button,[role='button']")).filter(isSpanCandidate);
     const counters = new Map();
     const candidates = [];
 
@@ -149,29 +305,30 @@
       const count = (counters.get(label) || 0) + 1;
       counters.set(label, count);
       const key = `${label}#${count}`;
-      const row = getTraceRow(element);
+      const row = getSpanRow(element);
 
-      element.setAttribute(TRACE_NODE_ATTR, key);
+      element.setAttribute(SPAN_ATTR, key);
       candidates.push({
         key,
         label,
         element,
         row,
-        durationText: getDurationText(element)
+        rowText: getSpanRowText(element),
+        durationText: getSpanDurationText(element)
       });
     }
 
     return candidates;
   }
 
-  function createCheckbox(candidate) {
+  function createSpanCheckbox(candidate) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.className = CHECKBOX_CLASS;
-    checkbox.title = "选择此 trace 用于 JSON 导出";
+    checkbox.title = "选择此 span 用于 JSON 导出";
     checkbox.setAttribute("aria-label", `选择 ${candidate.label}`);
     checkbox.dataset.ailyFor = candidate.key;
-    checkbox.checked = state.selectedKeys.has(candidate.key);
+    checkbox.checked = state.selectedSpanKeys.has(candidate.key);
 
     checkbox.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -180,10 +337,10 @@
     checkbox.addEventListener("change", (event) => {
       event.stopPropagation();
       if (checkbox.checked) {
-        state.selectedKeys.add(candidate.key);
+        state.selectedSpanKeys.add(candidate.key);
         candidate.row.classList.add(ROW_MARK_CLASS);
       } else {
-        state.selectedKeys.delete(candidate.key);
+        state.selectedSpanKeys.delete(candidate.key);
         candidate.row.classList.remove(ROW_MARK_CLASS);
       }
       updateToolbar();
@@ -192,20 +349,18 @@
     return checkbox;
   }
 
-  function scanTraceNodes() {
-    if (!isRuntimeLogPage()) {
-      removeToolbar();
-      return;
-    }
-
+  function scanSpanNodes() {
     ensureToolbar();
-    const candidates = collectTraceCandidates();
-    const liveKeys = new Set(candidates.map((item) => item.key));
-    state.traceNodes = new Map(candidates.map((item) => [item.key, item]));
+    state.mode = "run-detail";
+    state.runRows.clear();
 
-    for (const key of Array.from(state.selectedKeys)) {
+    const candidates = collectSpanCandidates();
+    const liveKeys = new Set(candidates.map((item) => item.key));
+    state.spanNodes = new Map(candidates.map((item) => [item.key, item]));
+
+    for (const key of Array.from(state.selectedSpanKeys)) {
       if (!liveKeys.has(key)) {
-        state.selectedKeys.delete(key);
+        state.selectedSpanKeys.delete(key);
       }
     }
 
@@ -214,26 +369,37 @@
       if (!parent) {
         continue;
       }
-
-      const existing = parent.querySelector(`.${CHECKBOX_CLASS}[data-aily-for="${CSS.escape(candidate.key)}"]`);
+      const selector = `.${CHECKBOX_CLASS}[data-aily-for="${CSS.escape(candidate.key)}"]`;
+      const existing = parent.querySelector(selector);
       if (!existing) {
-        const checkbox = createCheckbox(candidate);
-        parent.insertBefore(checkbox, candidate.element);
+        parent.insertBefore(createSpanCheckbox(candidate), candidate.element);
       } else {
-        existing.checked = state.selectedKeys.has(candidate.key);
+        existing.checked = state.selectedSpanKeys.has(candidate.key);
       }
-
-      candidate.row.classList.toggle(ROW_MARK_CLASS, state.selectedKeys.has(candidate.key));
+      candidate.row.classList.toggle(ROW_MARK_CLASS, state.selectedSpanKeys.has(candidate.key));
     }
 
     updateToolbar();
+  }
+
+  function scanPage() {
+    if (!isRuntimeLogPage()) {
+      removeToolbar();
+      return;
+    }
+
+    if (isRuntimeLogListPage()) {
+      scanRunRows();
+    } else {
+      scanSpanNodes();
+    }
   }
 
   function scheduleScan() {
     if (state.scanTimer) {
       clearTimeout(state.scanTimer);
     }
-    state.scanTimer = setTimeout(scanTraceNodes, 250);
+    state.scanTimer = setTimeout(scanPage, 250);
   }
 
   function ensureToolbar() {
@@ -255,7 +421,7 @@
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
         .panel {
-          width: 272px;
+          width: 286px;
           border: 1px solid rgba(15, 23, 42, 0.14);
           border-radius: 8px;
           background: #ffffff;
@@ -330,17 +496,17 @@
       </style>
       <section class="panel" aria-label="Aily runtime log exporter">
         <div class="header">
-          <span>Aily 日志导出</span>
+          <span data-role="title">Aily Trace ID 导出</span>
           <button class="icon" type="button" data-action="collapse" title="收起">-</button>
         </div>
         <div class="body">
           <div class="count" data-role="count">已选择 0 / 0</div>
           <div class="actions">
-            <button type="button" data-action="select-all">全选</button>
+            <button type="button" data-action="select-all">全选本页</button>
             <button type="button" data-action="clear">清空</button>
             <button class="primary" type="button" data-action="export">导出选中 JSON</button>
           </div>
-          <div class="status" data-role="status">等待选择 trace</div>
+          <div class="status" data-role="status">等待选择 trace ID</div>
         </div>
       </section>
     `;
@@ -355,7 +521,7 @@
       } else if (action === "clear") {
         clearSelection();
       } else if (action === "export") {
-        exportSelectedTraces();
+        exportSelected();
       } else if (action === "collapse") {
         toggleToolbar(shadow);
       }
@@ -397,27 +563,47 @@
     if (!state.toolbar) {
       return;
     }
+
+    const isList = state.mode === "run-list";
+    const selected = isList ? state.selectedRunIds.size : state.selectedSpanKeys.size;
+    const total = isList ? state.runRows.size : state.spanNodes.size;
+    const itemName = isList ? "trace ID" : "span";
+    const title = state.toolbar.querySelector("[data-role='title']");
     const count = state.toolbar.querySelector("[data-role='count']");
     const exportButton = state.toolbar.querySelector("[data-action='export']");
+
+    if (title) {
+      title.textContent = isList ? "Aily Trace ID 导出" : "Aily Span 导出";
+    }
     if (count) {
-      count.textContent = `已选择 ${state.selectedKeys.size} / ${state.traceNodes.size}`;
+      count.textContent = `已选择 ${selected} / ${total} 个 ${itemName}`;
     }
     if (exportButton) {
-      exportButton.disabled = state.exporting || state.selectedKeys.size === 0;
+      exportButton.disabled = state.exporting || selected === 0;
     }
   }
 
   function selectAll() {
-    for (const key of state.traceNodes.keys()) {
-      state.selectedKeys.add(key);
+    if (state.mode === "run-list") {
+      for (const key of state.runRows.keys()) {
+        state.selectedRunIds.add(key);
+      }
+      scanRunRows();
+      setStatus(`已选择 ${state.selectedRunIds.size} 个 trace ID`);
+      return;
     }
-    scanTraceNodes();
-    setStatus(`已选择 ${state.selectedKeys.size} 个 trace`);
+
+    for (const key of state.spanNodes.keys()) {
+      state.selectedSpanKeys.add(key);
+    }
+    scanSpanNodes();
+    setStatus(`已选择 ${state.selectedSpanKeys.size} 个 span`);
   }
 
   function clearSelection() {
-    state.selectedKeys.clear();
-    scanTraceNodes();
+    state.selectedRunIds.clear();
+    state.selectedSpanKeys.clear();
+    scanPage();
     setStatus("已清空选择");
   }
 
@@ -426,7 +612,7 @@
     const text = cleanText(document.body.innerText || "");
     const inputIndex = text.indexOf("\nInput\n");
     const outputIndex = text.indexOf("\nOutput\n");
-    return `${params.spanId}|${inputIndex}|${outputIndex}|${text.length}`;
+    return `${params.runId}|${params.spanId}|${inputIndex}|${outputIndex}|${text.length}`;
   }
 
   async function waitForDetailChange(previousFingerprint) {
@@ -436,6 +622,23 @@
       if (fingerprintDetails() !== previousFingerprint) {
         return;
       }
+    }
+  }
+
+  async function waitForRunDetailReady(runId) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < RUN_DETAIL_TIMEOUT_MS) {
+      const params = getRuntimeParams();
+      const text = cleanText(document.body.innerText || "");
+      if (
+        params.runId === runId &&
+        /运行日志/.test(text) &&
+        (/运行总览/.test(text) || /Input/.test(text) || /Output/.test(text))
+      ) {
+        await sleep(500);
+        return;
+      }
+      await sleep(250);
     }
   }
 
@@ -452,19 +655,29 @@
     return cleanText(end < 0 ? startText : startText.slice(0, end));
   }
 
-  function extractActiveDetails(candidate) {
+  function extractDetailText() {
     const fullText = cleanText(document.body.innerText || "");
     const inputIndex = fullText.search(/(^|\n)Input(\n|$)/);
     const detailStart =
       inputIndex > 0
-        ? Math.max(fullText.lastIndexOf("\n运行总览", inputIndex), fullText.lastIndexOf("\nLLM 思考", inputIndex), fullText.lastIndexOf("\n工具调用", inputIndex), 0)
-        : 0;
-    const detailText = cleanText(fullText.slice(detailStart));
+        ? Math.max(
+            fullText.lastIndexOf("\n运行总览", inputIndex),
+            fullText.lastIndexOf("\nLLM 思考", inputIndex),
+            fullText.lastIndexOf("\n工具调用", inputIndex),
+            fullText.lastIndexOf("\n运行日志", inputIndex),
+            0
+          )
+        : Math.max(fullText.lastIndexOf("\n运行日志"), 0);
+    return cleanText(fullText.slice(detailStart));
+  }
+
+  function extractActiveDetails(metadata) {
+    const detailText = extractDetailText();
     const inputText = extractSection(detailText, "Input", "Output");
     const outputText = extractSection(detailText, "Output");
     const summaryText = inputText
       ? cleanText(detailText.slice(0, detailText.indexOf("Input")))
-      : cleanText(detailText.slice(0, 2000));
+      : cleanText(detailText.slice(0, 3000));
 
     return {
       source: "dom-visible",
@@ -475,15 +688,12 @@
       output: {
         text: outputText
       },
-      metadata: {
-        label: candidate.label,
-        rowText: getRowText(candidate.element)
-      },
+      metadata,
       text: detailText
     };
   }
 
-  function inferType(label) {
+  function inferSpanType(label) {
     if (/LLM|deepseek/i.test(label)) {
       return "llm";
     }
@@ -496,9 +706,7 @@
     return "span";
   }
 
-  function findRawMatches(spanId) {
-    const params = getRuntimeParams();
-    const runId = params.runId;
+  function findRawMatches(runId, spanId) {
     const matches = [];
 
     for (const event of state.rawEvents.slice().reverse()) {
@@ -506,7 +714,7 @@
       if ((spanId && haystack.includes(spanId)) || (runId && haystack.includes(runId))) {
         matches.push(event);
       }
-      if (matches.length >= 6) {
+      if (matches.length >= 8) {
         break;
       }
     }
@@ -514,22 +722,25 @@
     return matches.reverse();
   }
 
-  function buildFilename(runId) {
-    const stamp = new Date()
+  function timestampForFilename() {
+    return new Date()
       .toISOString()
       .replace(/[-:]/g, "")
       .replace(/\..+/, "")
       .replace("T", "-");
-    return `aily-runtime-log-${runId || "run"}-${stamp}.json`;
   }
 
-  function downloadJson(payload) {
+  function buildFilename(prefix, id) {
+    return `${prefix}-${id || "batch"}-${timestampForFilename()}.json`;
+  }
+
+  function downloadJson(payload, filename) {
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = buildFilename(payload.runId);
+    link.download = filename;
     link.style.display = "none";
     document.documentElement.appendChild(link);
     link.click();
@@ -537,16 +748,238 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
-  async function exportSelectedTraces() {
-    if (state.exporting) {
+  function hasChromeStorage() {
+    return typeof chrome !== "undefined" && chrome.storage && chrome.storage.local;
+  }
+
+  function readJob() {
+    if (hasChromeStorage()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get(JOB_KEY, (items) => {
+          resolve(items && items[JOB_KEY] ? items[JOB_KEY] : null);
+        });
+      });
+    }
+
+    try {
+      return Promise.resolve(JSON.parse(sessionStorage.getItem(JOB_KEY) || "null"));
+    } catch (_) {
+      return Promise.resolve(null);
+    }
+  }
+
+  function writeJob(job) {
+    if (hasChromeStorage()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.set({ [JOB_KEY]: job }, resolve);
+      });
+    }
+
+    sessionStorage.setItem(JOB_KEY, JSON.stringify(job));
+    return Promise.resolve();
+  }
+
+  function removeJob() {
+    if (hasChromeStorage()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.remove(JOB_KEY, resolve);
+      });
+    }
+
+    sessionStorage.removeItem(JOB_KEY);
+    return Promise.resolve();
+  }
+
+  function getRunPayloadFromRow(item) {
+    return {
+      runId: item.runId,
+      traceId: item.traceId,
+      detailUrl: item.detailUrl,
+      listRow: {
+        statusText: item.statusText,
+        environment: item.environment,
+        user: item.user,
+        startTime: item.startTime,
+        channel: item.channel,
+        traceId: item.traceId,
+        conversationId: item.conversationId,
+        quota: item.quota,
+        durationText: item.durationText,
+        version: item.version,
+        cells: item.cells,
+        rowText: item.rowText
+      }
+    };
+  }
+
+  async function exportSelectedRuns() {
+    scanRunRows();
+    const runs = Array.from(state.selectedRunIds)
+      .map((key) => state.runRows.get(key))
+      .filter(Boolean)
+      .map(getRunPayloadFromRow);
+
+    if (!runs.length) {
+      setStatus("请先选择 trace ID");
       return;
     }
 
-    scanTraceNodes();
-    const selectedKeys = Array.from(state.selectedKeys);
+    state.exporting = true;
+    updateToolbar();
+
+    const job = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      type: "run-list-batch",
+      startedAt: new Date().toISOString(),
+      listUrl: location.href,
+      agentId: getRuntimeParams().agentId,
+      index: 0,
+      runs,
+      results: []
+    };
+
+    await writeJob(job);
+    setStatus(`开始导出 ${runs.length} 个 trace ID`);
+    location.href = runs[0].detailUrl;
+    window.setTimeout(() => {
+      state.exporting = false;
+      resumeBatchJob();
+    }, 1500);
+  }
+
+  function extractCurrentRunDetail(listRun) {
+    const params = getRuntimeParams();
+    const spanSummaries = collectSpanCandidates().map((candidate) => ({
+      label: candidate.label,
+      type: inferSpanType(candidate.label),
+      durationText: candidate.durationText,
+      rowText: candidate.rowText
+    }));
+    const details = extractActiveDetails({
+      runId: params.runId,
+      traceId: params.runId,
+      sourceListRow: listRun ? listRun.listRow : null
+    });
+    const raw = findRawMatches(params.runId, params.spanId);
+
+    return {
+      runId: params.runId,
+      traceId: params.runId,
+      spanId: params.spanId || "",
+      detailUrl: location.href,
+      capturedAt: new Date().toISOString(),
+      source: raw.length ? "network-cache+dom-visible" : details.source,
+      listRow: listRun ? listRun.listRow : null,
+      summaryText: details.summaryText,
+      input: details.input,
+      output: details.output,
+      spans: spanSummaries,
+      raw,
+      text: details.text
+    };
+  }
+
+  async function resumeBatchJob() {
+    if (state.resumingJob || state.exporting || !isRuntimeLogPage()) {
+      return;
+    }
+
+    const job = await readJob();
+    if (!job || job.type !== "run-list-batch") {
+      return;
+    }
+
+    if (!isRuntimeLogDetailPage()) {
+      if (job.runs[job.index]) {
+        location.href = job.runs[job.index].detailUrl;
+      }
+      return;
+    }
+
+    state.resumingJob = true;
+    state.exporting = true;
+    ensureToolbar();
+    updateToolbar();
+
+    try {
+      let currentJob = job;
+      let expected = currentJob.runs[currentJob.index];
+      const params = getRuntimeParams();
+
+      if (!expected || expected.runId !== params.runId) {
+        const matchingIndex = currentJob.runs.findIndex((run) => run.runId === params.runId);
+        if (matchingIndex >= 0) {
+          currentJob.index = matchingIndex;
+          expected = currentJob.runs[matchingIndex];
+        }
+      }
+
+      if (!expected) {
+        await removeJob();
+        setStatus("批量导出队列为空");
+        return;
+      }
+
+      if (expected.runId !== getRuntimeParams().runId) {
+        await writeJob(currentJob);
+        location.href = expected.detailUrl;
+        return;
+      }
+
+      setStatus(`采集中 ${currentJob.index + 1}/${currentJob.runs.length}: ${expected.traceId}`);
+      await waitForRunDetailReady(expected.runId);
+
+      currentJob.results.push(extractCurrentRunDetail(expected));
+      currentJob.index += 1;
+      currentJob.updatedAt = new Date().toISOString();
+
+      if (currentJob.index < currentJob.runs.length) {
+        const next = currentJob.runs[currentJob.index];
+        await writeJob(currentJob);
+        setStatus(`继续导出 ${currentJob.index + 1}/${currentJob.runs.length}`);
+        location.href = next.detailUrl;
+        return;
+      }
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        startedAt: currentJob.startedAt,
+        listUrl: currentJob.listUrl,
+        pageUrl: location.href,
+        agentId: currentJob.agentId,
+        selectedCount: currentJob.runs.length,
+        traceIds: currentJob.runs.map((run) => run.traceId),
+        logs: currentJob.results
+      };
+
+      await removeJob();
+      downloadJson(payload, buildFilename("aily-runtime-logs", `${payload.selectedCount}-traceids`));
+      setStatus(`已导出 ${payload.selectedCount} 个 trace ID`);
+    } catch (error) {
+      const jobOnError = await readJob();
+      if (jobOnError) {
+        jobOnError.errors = jobOnError.errors || [];
+        jobOnError.errors.push({
+          at: new Date().toISOString(),
+          url: location.href,
+          message: error && error.message ? error.message : String(error)
+        });
+        await writeJob(jobOnError);
+      }
+      setStatus(`导出失败: ${error && error.message ? error.message : String(error)}`);
+    } finally {
+      state.exporting = false;
+      state.resumingJob = false;
+      updateToolbar();
+    }
+  }
+
+  async function exportSelectedSpans() {
+    scanSpanNodes();
+    const selectedKeys = Array.from(state.selectedSpanKeys);
 
     if (!selectedKeys.length) {
-      setStatus("请先选择 trace");
+      setStatus("请先选择 span");
       return;
     }
 
@@ -559,8 +992,8 @@
 
     try {
       for (let index = 0; index < selectedKeys.length; index += 1) {
-        scanTraceNodes();
-        const candidate = state.traceNodes.get(selectedKeys[index]);
+        scanSpanNodes();
+        const candidate = state.spanNodes.get(selectedKeys[index]);
         if (!candidate || !document.documentElement.contains(candidate.element)) {
           continue;
         }
@@ -572,13 +1005,18 @@
         await sleep(180);
 
         const params = getRuntimeParams();
-        const details = extractActiveDetails(candidate);
-        const raw = findRawMatches(params.spanId);
+        const details = extractActiveDetails({
+          label: candidate.label,
+          rowText: candidate.rowText
+        });
+        const raw = findRawMatches(params.runId, params.spanId);
 
         traces.push({
+          runId: params.runId || "",
+          traceId: params.runId || "",
           spanId: params.spanId || "",
           label: candidate.label,
-          type: inferType(candidate.label),
+          type: inferSpanType(candidate.label),
           durationText: candidate.durationText,
           source: raw.length ? "network-cache+dom-visible" : details.source,
           summaryText: details.summaryText,
@@ -594,12 +1032,13 @@
         pageUrl: originalUrl,
         agentId: initialParams.agentId,
         runId: initialParams.runId,
+        traceId: initialParams.runId,
         selectedCount: traces.length,
         traces
       };
 
-      downloadJson(payload);
-      setStatus(`已导出 ${traces.length} 个 trace`);
+      downloadJson(payload, buildFilename("aily-runtime-log-spans", initialParams.runId));
+      setStatus(`已导出 ${traces.length} 个 span`);
     } catch (error) {
       setStatus(`导出失败: ${error && error.message ? error.message : String(error)}`);
     } finally {
@@ -608,9 +1047,20 @@
     }
   }
 
+  function exportSelected() {
+    if (state.exporting) {
+      return;
+    }
+    if (state.mode === "run-list") {
+      exportSelectedRuns();
+    } else {
+      exportSelectedSpans();
+    }
+  }
+
   function injectPageHook() {
     try {
-      if (!chrome || !chrome.runtime || !chrome.runtime.getURL) {
+      if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.getURL) {
         return;
       }
       if (document.documentElement.querySelector("script[data-aily-runtime-log-hook]")) {
@@ -650,15 +1100,16 @@
         return false;
       }
       if (message.type === "AILY_EXPORT_SELECTED") {
-        exportSelectedTraces().then(() => sendResponse({ ok: true }));
+        Promise.resolve(exportSelected()).then(() => sendResponse({ ok: true }));
         return true;
       }
       if (message.type === "AILY_RESCAN") {
-        scanTraceNodes();
+        scanPage();
         sendResponse({
           ok: true,
-          selected: state.selectedKeys.size,
-          traces: state.traceNodes.size,
+          selected: state.mode === "run-list" ? state.selectedRunIds.size : state.selectedSpanKeys.size,
+          traces: state.mode === "run-list" ? state.runRows.size : state.spanNodes.size,
+          mode: state.mode,
           runtimeLogPage: isRuntimeLogPage()
         });
         return false;
@@ -666,8 +1117,9 @@
       if (message.type === "AILY_STATUS") {
         sendResponse({
           ok: true,
-          selected: state.selectedKeys.size,
-          traces: state.traceNodes.size,
+          selected: state.mode === "run-list" ? state.selectedRunIds.size : state.selectedSpanKeys.size,
+          traces: state.mode === "run-list" ? state.runRows.size : state.spanNodes.size,
+          mode: state.mode,
           runtimeLogPage: isRuntimeLogPage(),
           runId: getRuntimeParams().runId
         });
@@ -693,6 +1145,7 @@
         subtree: true
       });
       scheduleScan();
+      window.setTimeout(resumeBatchJob, 1000);
     };
 
     if (document.readyState === "loading") {
@@ -701,21 +1154,26 @@
       startObserver();
     }
 
-    window.addEventListener("popstate", scheduleScan);
+    window.addEventListener("popstate", () => {
+      scheduleScan();
+      window.setTimeout(resumeBatchJob, 500);
+    });
     window.setInterval(() => {
       if (isRuntimeLogPage()) {
         scheduleScan();
+        resumeBatchJob();
       }
     }, 2000);
   }
 
   window.__ailyRuntimeLogExporter = {
-    scan: scanTraceNodes,
-    exportSelected: exportSelectedTraces,
+    scan: scanPage,
+    exportSelected,
     getState: () => ({
-      selected: state.selectedKeys.size,
-      traces: state.traceNodes.size,
+      selected: state.mode === "run-list" ? state.selectedRunIds.size : state.selectedSpanKeys.size,
+      traces: state.mode === "run-list" ? state.runRows.size : state.spanNodes.size,
       rawEvents: state.rawEvents.length,
+      mode: state.mode,
       runtimeLogPage: isRuntimeLogPage()
     })
   };

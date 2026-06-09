@@ -14,7 +14,9 @@
     "default_popup": "src/popup.html"
   },
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "storage",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://feishu.cn/*"
@@ -44,4 +46,3 @@
     }
   ]
 }
-
