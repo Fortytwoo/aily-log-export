@@ -28,3 +28,21 @@
 .\scripts\generate-icons.ps1
 node .\scripts\validate-extension.mjs
 ```
+
+## Chrome Web Store 构建
+
+Chrome Web Store 上传使用 ZIP 包：
+
+```powershell
+.\scripts\build-webstore.ps1
+```
+
+输出文件位于 `dist/aily-runtime-log-exporter-v<version>-webstore.zip`，可直接在 Chrome Web Store Developer Dashboard 中上传。
+
+如需本地 CRX 测试包，可运行：
+
+```powershell
+.\scripts\build-crx.ps1
+```
+
+CRX 和 PEM 私钥会生成在 `dist/`，这些文件已被 `.gitignore` 排除。不要提交 PEM 私钥。

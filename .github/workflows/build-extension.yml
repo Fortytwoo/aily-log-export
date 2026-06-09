@@ -1,0 +1,35 @@
+name: Build Extension
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Syntax check
+        shell: pwsh
+        run: |
+          node --check .\src\content.js
+          node --check .\src\page-hook.js
+          node --check .\src\popup.js
+          node --check .\scripts\smoke-chrome.mjs
+
+      - name: Build Chrome Web Store ZIP
+        shell: pwsh
+        run: .\scripts\build-webstore.ps1
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-web-store-package
+          path: dist/*-webstore.zip
+          if-no-files-found: error
+

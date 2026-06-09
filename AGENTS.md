@@ -19,6 +19,8 @@ There is no bundled build output directory. Do not commit exported runtime log J
 - `.\scripts\generate-icons.ps1`: regenerate `icons/icon16.png`, `icon32.png`, `icon48.png`, and `icon128.png`.
 - `node .\scripts\validate-extension.mjs`: verify manifest shape and required extension files.
 - `node .\scripts\smoke-chrome.mjs`: launch a temporary Chrome profile, load the unpacked extension, and verify list-page checkbox injection.
+- `.\scripts\build-webstore.ps1`: create `dist/*-webstore.zip` for Chrome Web Store upload.
+- `.\scripts\build-crx.ps1`: optionally create a local CRX package and PEM key in `dist/`.
 - `node --check .\src\content.js`: syntax-check a single JavaScript file. Repeat for changed JS files.
 
 For manual testing, open `chrome://extensions`, enable Developer mode, load this repository as an unpacked extension, then open a Feishu Aily runtime-log page.
@@ -27,7 +29,7 @@ For manual testing, open `chrome://extensions`, enable Developer mode, load this
 
 Use plain JavaScript, HTML, CSS, and PowerShell. Keep files dependency-free unless a dependency is clearly justified. Use two-space indentation in JSON/HTML/CSS and existing JavaScript style in `src/*.js`. Prefer descriptive camelCase names for JavaScript functions and constants in `UPPER_SNAKE_CASE` only for fixed configuration keys.
 
-Do not log or paste Feishu runtime log contents, cookies, tokens, or API response bodies in commits, README examples, or issue text.
+Do not log or paste Feishu runtime log contents, cookies, tokens, API response bodies, or generated CRX PEM keys in commits, README examples, or issue text.
 
 ## Testing Guidelines
 
@@ -38,4 +40,3 @@ Run `node .\scripts\validate-extension.mjs` and `node .\scripts\smoke-chrome.mjs
 Recent commits use short imperative summaries, for example `Avoid blocking runtime log controls` and `Support batch export from runtime log list`. Keep commit messages focused on user-visible behavior.
 
 Pull requests should include a concise description, affected extension surfaces, validation commands run, and screenshots or screen recordings for UI changes. Mention any changes to Chrome permissions in `manifest.json`.
-
