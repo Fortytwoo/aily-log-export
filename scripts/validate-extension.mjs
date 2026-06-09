@@ -38,8 +38,12 @@ if (manifest) {
     errors.push("manifest_version must be 3");
   }
   const matches = manifest.content_scripts?.[0]?.matches || [];
-  if (!matches.includes("https://feishu.cn/ai/*")) {
+  if (!matches.includes("https://*.feishu.cn/ai/*")) {
     errors.push("content script must match Feishu Aily pages");
+  }
+  const hostPermissions = manifest.host_permissions || [];
+  if (!hostPermissions.includes("https://*.feishu.cn/*")) {
+    errors.push("host permissions must cover Feishu subdomains");
   }
   if (!manifest.web_accessible_resources?.length) {
     errors.push("page hook must be web-accessible");
@@ -64,4 +68,3 @@ if (errors.length) {
 }
 
 console.log("Extension validation passed");
-

@@ -11,6 +11,7 @@ This repository is a Manifest V3 Chrome extension for exporting Feishu Aily runt
 - `src/popup.html`, `src/popup.css`, `src/popup.js`: toolbar popup status and export controls.
 - `icons/`: generated PNG icons for Chrome extension sizes.
 - `scripts/`: local validation, icon generation, and Chrome smoke testing.
+- `docs/`: Chrome Web Store publishing copy, privacy policy, and review notes.
 
 There is no bundled build output directory. Do not commit exported runtime log JSON files or local diagnostic logs.
 

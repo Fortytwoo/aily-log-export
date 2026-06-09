@@ -35,7 +35,11 @@
   const durationPattern = /(\d+(?:\.\d+)?\s*(?:ms|s|min|秒|分钟))/i;
 
   function isRuntimeLogPage() {
-    return location.hostname === "feishu.cn" && /\/builder\/runtime-log\/?$/.test(location.pathname);
+    return isFeishuHost(location.hostname) && /\/builder\/runtime-log\/?$/.test(location.pathname);
+  }
+
+  function isFeishuHost(hostname) {
+    return hostname === "feishu.cn" || hostname.endsWith(".feishu.cn");
   }
 
   function getRuntimeParams() {

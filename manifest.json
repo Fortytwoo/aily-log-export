@@ -19,12 +19,12 @@
     "unlimitedStorage"
   ],
   "host_permissions": [
-    "https://feishu.cn/*"
+    "https://*.feishu.cn/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://feishu.cn/ai/*"
+        "https://*.feishu.cn/ai/*"
       ],
       "js": [
         "src/content.js"
@@ -41,7 +41,7 @@
         "src/page-hook.js"
       ],
       "matches": [
-        "https://feishu.cn/*"
+        "https://*.feishu.cn/*"
       ]
     }
   ]

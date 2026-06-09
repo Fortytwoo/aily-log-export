@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 在 `feishu.cn` 的 Aily 运行日志列表页注入页面内导出工具栏。
+- 在 `*.feishu.cn` 的 Aily 运行日志列表页注入页面内导出工具栏。
 - 在运行日志表格行旁添加多选框，支持批量选择多个 `trace ID`。
 - 批量打开所选 `trace ID` 对应详情页，采集运行日志后导出为一个 JSON 文件。
 - 仍兼容详情页内 span 多选导出。
@@ -46,3 +46,8 @@ Chrome Web Store 上传使用 ZIP 包：
 ```
 
 CRX 和 PEM 私钥会生成在 `dist/`，这些文件已被 `.gitignore` 排除。不要提交 PEM 私钥。
+
+发布页文案、权限说明、审核说明和隐私政策草稿见：
+
+- `docs/chrome-web-store-submission.md`
+- `docs/privacy-policy.md`
