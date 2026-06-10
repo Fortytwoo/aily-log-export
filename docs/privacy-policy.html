@@ -76,7 +76,7 @@
     <p class="meta">Aily Runtime Log Exporter · Effective date: 2026-06-09</p>
 
     <h2>概述</h2>
-    <p>Aily Runtime Log Exporter 是一个 Chrome 扩展，用于将用户在飞书 Aily 运行日志页面中选择的运行日志导出为本地 JSON 文件。</p>
+    <p>Aily Runtime Log Exporter 是一个 Chrome 扩展，用于将用户在飞书 Aily 运行日志页面中选择的运行日志导出为本地 ZIP 文件。</p>
 
     <h2>处理的数据</h2>
     <p>当用户打开匹配的飞书 Aily 运行日志页面并主动使用导出功能时，扩展可能在本地处理以下数据：</p>
@@ -87,16 +87,16 @@
     </ul>
 
     <h2>数据存储与保留</h2>
-    <p>所有处理均在用户浏览器本地完成。临时导出状态仅在批量导出期间保存到 Chrome 本地存储，并在导出完成后清理。导出的 JSON 文件会下载到用户设备，由用户自行管理。</p>
+    <p>所有处理均在用户浏览器本地完成。临时导出状态仅在批量导出期间保存到 Chrome 本地存储，并在导出完成后清理。导出的 ZIP 文件会下载到用户设备，由用户自行管理。</p>
 
     <h2>数据共享</h2>
-    <p>扩展不会将运行日志、trace ID、导出的 JSON、Cookie、Token、密码或浏览活动发送到任何外部服务器。扩展不会出售、共享用户数据，也不会将数据用于广告、画像或分析。</p>
+    <p>扩展不会将运行日志、trace ID、导出的 ZIP、Cookie、Token、密码或浏览活动发送到任何外部服务器。扩展不会出售、共享用户数据，也不会将数据用于广告、画像或分析。</p>
 
     <h2>权限说明</h2>
-    <p>扩展请求访问 <code>https://*.feishu.cn/*</code>，用于支持不同飞书子域名下的 Aily 运行日志页面。<code>storage</code> 和 <code>unlimitedStorage</code> 权限仅用于本地临时导出状态。</p>
+    <p>扩展请求访问 <code>https://*.feishu.cn/*</code>，用于支持不同飞书子域名下的 Aily 运行日志页面。<code>storage</code> 和 <code>unlimitedStorage</code> 权限仅用于本地临时导出状态。<code>downloads</code> 权限仅用于在用户触发导出后打开导出的 ZIP 文件位置。</p>
 
     <h2>安全提示</h2>
-    <p>运行日志可能包含业务数据、模型输入输出、工具调用结果或其他内部信息。请将导出的 JSON 文件视为敏感数据，并按照所在组织的数据权限要求管理。</p>
+    <p>运行日志可能包含业务数据、模型输入输出、工具调用结果或其他内部信息。请将导出的 ZIP 文件视为敏感数据，并按照所在组织的数据权限要求管理。</p>
 
     <h2>Contact</h2>
     <p>For issues or privacy questions, use the GitHub repository: <a href="https://github.com/Fortytwoo/aily-log-export">Fortytwoo/aily-log-export</a>.</p>

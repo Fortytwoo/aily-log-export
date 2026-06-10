@@ -4,7 +4,7 @@ Effective date: 2026-06-09
 
 ## Overview
 
-Aily Runtime Log Exporter is a Chrome extension for exporting selected Feishu Aily runtime logs from `*.feishu.cn` pages into local JSON files.
+Aily Runtime Log Exporter is a Chrome extension for exporting selected Feishu Aily runtime logs from `*.feishu.cn` pages into local ZIP files.
 
 ## Data Processed
 
@@ -16,19 +16,19 @@ The extension may process the following data when the user opens a matching Feis
 
 ## Data Storage and Retention
 
-All processing happens locally in the user’s browser. Temporary export state is stored with Chrome local storage only while a batch export is running and is removed after completion. Exported JSON files are downloaded to the user’s device and are controlled by the user.
+All processing happens locally in the user’s browser. Temporary export state is stored with Chrome local storage only while a batch export is running and is removed after completion. Exported ZIP files are downloaded to the user’s device and are controlled by the user.
 
 ## Data Sharing
 
-The extension does not send runtime log data, trace IDs, exported JSON, cookies, tokens, or browsing activity to any external server. The extension does not sell or share user data and does not use data for advertising, profiling, or analytics.
+The extension does not send runtime log data, trace IDs, exported ZIP files, cookies, tokens, or browsing activity to any external server. The extension does not sell or share user data and does not use data for advertising, profiling, or analytics.
 
 ## Permissions
 
-The extension requests access only for `https://*.feishu.cn/*` so it can add export controls to Feishu Aily runtime-log pages across Feishu subdomains. The `storage` permissions are used for local temporary export state.
+The extension requests access only for `https://*.feishu.cn/*` so it can add export controls to Feishu Aily runtime-log pages across Feishu subdomains. The `storage` permissions are used for local temporary export state. The `downloads` permission is used only to open the exported ZIP location after a user-triggered export.
 
 ## Security
 
-Users should treat exported JSON files as sensitive because runtime logs may contain business data, model input/output, tool results, or other internal information.
+Users should treat exported ZIP files as sensitive because runtime logs may contain business data, model input/output, tool results, or other internal information.
 
 ## Contact
 
