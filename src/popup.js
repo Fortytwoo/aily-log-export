@@ -30,7 +30,7 @@
         setStatus("请打开飞书 Aily 运行日志页");
         return;
       }
-      exportButton.disabled = result.selected === 0;
+      exportButton.disabled = result.mode === "run-list" && result.selected === 0;
       const itemName = result.mode === "run-list" ? "trace ID" : "span";
       const prefix = result.runId ? `run_id: ${result.runId}` : "运行日志列表";
       setStatus(`${prefix}，已选择 ${result.selected}/${result.traces} 个 ${itemName}`);
@@ -52,7 +52,7 @@
 
   exportButton.addEventListener("click", async () => {
     exportButton.disabled = true;
-    setStatus("正在导出选中 trace...");
+    setStatus("正在导出 ZIP...");
     try {
       await sendToActiveTab({ type: "AILY_EXPORT_SELECTED" });
       window.close();

@@ -166,13 +166,22 @@ try {
       toolbar: Boolean(document.getElementById("aily-runtime-log-exporter")),
       collapsed: document.getElementById("aily-runtime-log-exporter")?.shadowRoot?.querySelector(".panel")?.classList.contains("collapsed"),
       checkboxes: document.querySelectorAll(".aily-log-export-checkbox").length,
+      exportText: document.getElementById("aily-runtime-log-exporter")?.shadowRoot?.querySelector("[data-action='export']")?.textContent,
       state: window.__ailyRuntimeLogExporter.getState()
     }))()`,
     returnByValue: true
   });
 
   const value = result.result.value;
-  if (!value.toolbar || !value.collapsed || value.checkboxes < 3 || !value.state || value.state.mode !== "run-list" || value.state.traces < 3) {
+  if (
+    !value.toolbar ||
+    !value.collapsed ||
+    value.checkboxes < 3 ||
+    value.exportText !== "导出选中 ZIP" ||
+    !value.state ||
+    value.state.mode !== "run-list" ||
+    value.state.traces < 3
+  ) {
     throw new Error(`Unexpected smoke result: ${JSON.stringify(value)}`);
   }
 

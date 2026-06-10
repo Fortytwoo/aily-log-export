@@ -6,9 +6,9 @@ Use `dist/aily-runtime-log-exporter-v<version>-webstore.zip` from `.\scripts\bui
 
 **Extension name:** Aily Runtime Log Exporter
 
-**Short description (zh-CN):** 批量导出飞书 Aily 运行日志 trace ID 详情为本地 JSON 文件。
+**Short description (zh-CN):** 批量导出飞书 Aily 运行日志 trace ID 详情为本地 ZIP 文件。
 
-**Short description (en):** Export selected Feishu Aily runtime trace IDs and logs as local JSON files.
+**Short description (en):** Export selected Feishu Aily runtime trace IDs and logs as local ZIP files.
 
 **Detailed description (zh-CN):**
 
@@ -18,8 +18,8 @@ Aily Runtime Log Exporter 用于在飞书 Aily 智能体运行日志页面批量
 
 - 在飞书 Aily 运行日志列表中添加轻量多选框。
 - 支持从列表页一次选择多个 trace ID。
-- 自动依次打开所选 trace 详情页，并导出为一个 JSON 文件。
-- 支持在单个运行详情页按 span 选择导出。
+- 自动依次打开所选 trace 详情页，并导出为一个 ZIP 文件。
+- 支持在单个运行详情页导出当前 trace、深度采集 ZIP，或按 span 选择导出 ZIP。
 - 导出流程只在浏览器本地执行，不使用外部服务器。
 
 适用对象：飞书 Aily 智能体管理员、构建者、运维支持和内部排障人员。适用于需要备份近 30 天运行日志、复盘问题、留存调试证据的场景。
@@ -32,8 +32,8 @@ Key features:
 
 - Adds non-intrusive checkboxes to the Feishu Aily runtime log table.
 - Supports selecting multiple trace IDs from the list page.
-- Opens selected trace details in sequence and exports the collected runtime logs as one JSON file.
-- Supports span-level export on a runtime detail page.
+- Opens selected trace details in sequence and exports the collected runtime logs as one ZIP file.
+- Supports current-trace ZIP export, manual deep ZIP export, and span-level ZIP export on a runtime detail page.
 - Keeps the export workflow local in the browser; no external server is used.
 
 This extension is intended for Feishu Aily administrators, builders, and internal support teams that need repeatable runtime log backup for debugging and audit workflows.
@@ -52,11 +52,11 @@ This extension is intended for Feishu Aily administrators, builders, and interna
 
 **Single purpose:**
 
-Export selected Feishu Aily runtime log records from `*.feishu.cn` pages into user-downloaded JSON files for debugging and backup.
+Export selected Feishu Aily runtime log records from `*.feishu.cn` pages into user-downloaded ZIP files for debugging and backup.
 
 **User data handling summary:**
 
-The extension reads runtime log table rows and runtime detail content only on matching Feishu Aily runtime-log pages. Selected trace IDs, temporary export progress, captured same-origin runtime responses, and generated JSON files stay local in the user’s browser/device. The extension does not send data to any external server and does not sell, share, or use data for advertising.
+The extension reads runtime log table rows and runtime detail content only on matching Feishu Aily runtime-log pages. Selected trace IDs, temporary export progress, captured same-origin runtime responses, and generated ZIP files stay local in the user’s browser/device. The extension does not send data to any external server and does not sell, share, or use data for advertising.
 
 **Data disclosure suggestion:**
 
@@ -72,9 +72,11 @@ The extension reads runtime log table rows and runtime detail content only on ma
 
 **`unlimitedStorage`:** Avoids interruption when selected runtime logs are large. Storage is only used locally for temporary export queue/state.
 
+**`downloads`:** Lets the extension open the exported ZIP location after a user-triggered export. It is not used to read or upload downloaded files.
+
 **Host permission `https://*.feishu.cn/*`:** Allows the extension to work across Feishu subdomains where Aily runtime-log pages may be hosted, while the content script still activates only on `/ai/.../builder/runtime-log` pages.
 
-**Web-accessible resource `src/page-hook.js`:** Injects a small page-context hook to capture same-origin runtime-log responses for more complete JSON export. It does not communicate with external servers.
+**Web-accessible resource `src/page-hook.js`:** Injects a small page-context hook to capture same-origin runtime-log responses for more complete ZIP export. It does not communicate with external servers.
 
 ## Test Instructions for Review
 
@@ -82,8 +84,8 @@ The extension reads runtime log table rows and runtime detail content only on ma
 2. Open a Feishu Aily runtime log list page under `https://<tenant-or-app>.feishu.cn/ai/.../builder/runtime-log`.
 3. Confirm a small “导” floating button appears at the lower-right corner.
 4. Select one or more runtime log table rows by checkbox.
-5. Open the floating panel and click “导出选中 JSON”.
-6. Confirm a JSON file is downloaded after the selected trace detail pages are processed.
+5. Open the floating panel and click “导出选中 ZIP”.
+6. Confirm a ZIP file is downloaded after the selected trace detail pages are processed.
 
 Reviewer credentials may be required because Feishu Aily runtime-log pages are authenticated internal pages.
 
